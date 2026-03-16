@@ -11,7 +11,8 @@ try:
 except ImportError:
     st.error("OpenCV System-Bibliotheken fehlen noch. Bitte 'packages.txt' prüfen.")
 
-from ultralytics import YOLOimport os
+from ultralytics import YOLO
+import os
 # Verhindert, dass OpenCV nach bestimmten Grafik-Treibern sucht
 os.environ["QT_QPA_PLATFORM"] = "offscreen"import streamlit as st
 from ultralytics import YOLO
