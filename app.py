@@ -1,4 +1,6 @@
-import streamlit as st
+import os
+# Verhindert, dass OpenCV nach bestimmten Grafik-Treibern sucht
+os.environ["QT_QPA_PLATFORM"] = "offscreen"import streamlit as st
 from ultralytics import YOLO
 import pandas as pd
 from PIL import Image
