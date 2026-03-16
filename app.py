@@ -5,57 +5,94 @@ from PIL import Image
 import datetime
 import os
 
-# Seite konfigurieren
-st.set_page_config(page_title="KI Fundbüro", page_icon="🔍")
+# 1. Grundkonfiguration
+st.set_page_config(page_title="KI Fundbüro", page_icon="🕵️", layout="wide")
 
-# Modell laden (YOLOv8 Nano - leicht & schnell für Streamlit)
+# Ordner für Bilder erstellen, falls er nicht existiert
+IMG_FOLDER = "found_images"
+if not os.path.exists(IMG_FOLDER):
+    os.makedirs(IMG_FOLDER)
+
+# CSV Datenbank initialisieren
+DB_FILE = "data.csv"
+if not os.path.exists(DB_FILE):
+    df = pd.DataFrame(columns=["ID", "Datum", "Gegenstand", "Ort", "Bildpfad"])
+    df.to_csv(DB_FILE, index=False)
+
+# YOLO Modell laden
 @st.cache_resource
 def load_model():
     return YOLO('yolov8n.pt')
 
 model = load_model()
 
-# Datenbank laden (CSV)
-DB_FILE = "data.csv"
-if not os.path.exists(DB_FILE):
-    df = pd.DataFrame(columns=["Datum", "Gegenstand", "Ort", "Status"])
-    df.to_csv(DB_FILE, index=False)
+# 2. UI - Sidebar
+st.sidebar.title("🕵️ Menü")
+choice = st.sidebar.radio("Navigation", ["Gegenstand melden", "Galerie durchsuchen"])
 
-st.title("🔍 KI-gestütztes Fundbüro")
-menu = ["Gegenstand melden", "Fundbüro durchsuchen"]
-choice = st.sidebar.selectbox("Navigation", menu)
-
+# 3. Funktion: Gegenstand melden
 if choice == "Gegenstand melden":
-    st.header("Neuen Fund registrieren")
+    st.header("📸 Fundstück hochladen")
     
-    # Kamera oder Upload
-    img_file = st.camera_input("Foto vom Fundstück machen") # Oder st.file_uploader
-    fundort = st.text_input("Wo wurde es gefunden?", placeholder="z.B. Mensa, Parkplatz A")
+    with st.expander("Anleitung", expanded=True):
+        st.write("Lade ein Bild hoch. Unsere KI versucht automatisch zu erkennen, was es ist!")
 
-    if img_file and st.button("KI-Analyse & Speichern"):
-        img = Image.open(img_file)
+    uploaded_file = st.file_uploader("Bild auswählen...", type=['jpg', 'jpeg', 'png'])
+    fundort = st.text_input("Fundort (z.B. Café, Flur 2, Buslinie 10)")
+
+    if uploaded_file and fundort:
+        img = Image.open(uploaded_file)
+        
+        # KI Analyse
         results = model(img)
         
-        # Erkennung auslesen
-        detected_names = []
-        for r in results:
-            for c in r.boxes.cls:
-                detected_names.append(model.names[int(c)])
+        # Erkennung verarbeiten
+        detected_items = [model.names[int(c)] for r in results for c in r.boxes.cls]
+        primary_item = detected_items[0] if detected_items else "Unbekannt"
         
-        label = detected_names[0] if detected_names else "Unbekannt"
-        label_de = label.replace("cell phone", "Handy").replace("backpack", "Rucksack") # Quick-Fix Übersetzung
+        st.info(f"KI-Vorschlag: **{primary_item}**")
         
-        st.success(f"Erkannt: **{label_de}**")
-        st.image(results[0].plot(), caption="KI-Vorschau")
+        if st.button("Fund offiziell registrieren"):
+            # Bild speichern
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            img_filename = f"{timestamp}_{primary_item}.jpg"
+            img_path = os.path.join(IMG_FOLDER, img_filename)
+            img.save(img_path)
+            
+            # In CSV speichern
+            new_entry = {
+                "ID": timestamp,
+                "Datum": datetime.datetime.now().strftime("%d.%m.%Y"),
+                "Gegenstand": primary_item,
+                "Ort": fundort,
+                "Bildpfad": img_path
+            }
+            pd.DataFrame([new_entry]).to_csv(DB_FILE, mode='a', header=False, index=False)
+            
+            st.success("Erfolgreich gespeichert!")
+            st.balloons()
 
-        # In CSV speichern
-        new_data = pd.DataFrame([[datetime.datetime.now().strftime("%d.%m.%Y %H:%M"), label_de, fundort, "Gefunden"]], 
-                                columns=["Datum", "Gegenstand", "Ort", "Status"])
-        new_data.to_csv(DB_FILE, mode='a', header=False, index=False)
-        st.balloons()
-        st.info("Eintrag wurde gespeichert!")
+# 4. Funktion: Galerie durchsuchen
+else:
+    st.header("📦 Aktuelle Fundstücke")
+    
+    if os.path.exists(DB_FILE):
+        df = pd.read_csv(DB_FILE)
+        
+        if df.empty:
+            st.warning("Noch keine Fundstücke registriert.")
+        else:
+            # Suche / Filter
+            search = st.text_input("Nach Gegenstand oder Ort suchen...")
+            if search:
+                df = df[df['Gegenstand'].str.contains(search, case=False) | df['Ort'].str.contains(search, case=False)]
 
-elif choice == "Fundbüro durchsuchen":
-    st.header("Aktuelle Fundstücke")
-    df_display = pd.read_csv(DB_FILE)
-    st.dataframe(df_display, use_container_width=True)
+            # Darstellung in Spalten (Grid)
+            cols = st.columns(3)
+            for index, row in df.iterrows():
+                with cols[index % 3]:
+                    if os.path.exists(row['Bildpfad']):
+                        st.image(row['Bildpfad'], use_container_width=True)
+                    st.write(f"**{row['Gegenstand']}**")
+                    st.caption(f"📍 {row['Ort']} | 📅 {row['Datum']}")
+                    st.divider()
