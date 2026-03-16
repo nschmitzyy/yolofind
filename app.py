@@ -1,11 +1,24 @@
 import os
+import sys
+
+# Dieser Block muss GANZ OBEN stehen, vor jedem anderen Import
+os.environ["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu"
+
+import streamlit as st
+# Versuche OpenCV explizit zuerst zu laden, bevor Ultralytics es tut
+try:
+    import cv2
+except ImportError:
+    st.error("OpenCV System-Bibliotheken fehlen noch. Bitte 'packages.txt' prüfen.")
+
+from ultralytics import YOLOimport os
 # Verhindert, dass OpenCV nach bestimmten Grafik-Treibern sucht
 os.environ["QT_QPA_PLATFORM"] = "offscreen"import streamlit as st
 from ultralytics import YOLO
 import pandas as pd
 from PIL import Image
 import datetime
-import os
+
 
 # 1. Grundkonfiguration
 st.set_page_config(page_title="KI Fundbüro", page_icon="🕵️", layout="wide")
